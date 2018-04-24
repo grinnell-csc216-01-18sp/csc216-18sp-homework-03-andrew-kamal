@@ -24,10 +24,10 @@ class BaseSender(object):
         self.output_queue.put(seg)
 
     def disallow_app_msgs(self):
-        self.blocked = False
+        self.blocked = True
 
     def allow_app_msgs(self):
-        self.blocked = True
+        self.blocked = False
 
     def step(self):
         self.app_timer += 1
@@ -40,9 +40,9 @@ class BaseSender(object):
         if self.custom_enabled:
             self.custom_timer += 1
             if self.custom_timer >= self.custom_interval:
-                self.on_interrupt()
                 self.custom_timer = 0
                 self.custom_enabled = False
+                self.on_interrupt()
 
     def start_timer(self, interval):
         self.custom_enabled  = True
