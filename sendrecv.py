@@ -60,12 +60,61 @@ class NaiveReceiver(BaseReceiver):
         self.send_to_app(seg.msg)
 
 class AltSender(BaseSender):
-    # TODO: fill me in!
-    pass
+    def __init__(self, app_interval):
+        super(AltSender, self).__init__(app_interval)
+        self.segment = 0
+        self.can_send = True
+        self.last_msg = None
+        self.timeout = 10
+
+    def receive_from_app(self, msg):
+        # get the hash of the message to be used for comparison for receiver
+        if self.can_send:
+            msg = {'segment':self.segment, 'message':msg, 'hash':hash(msg)}
+            seg = Segment(msg, 'receiver')
+            self.last_msg = seg
+            self.send_to_network(seg)
+            self.start_timer(self.timeout)
+            # waiting for ACK
+            self.can_send = False
+
+    def receive_from_network(self, seg):
+        if type(seg.msg) == dict and seg.msg['segment'] == self.segment \
+                and hash(seg.msg['segment']) == seg.msg['hash']:
+            self.segment = (self.segment + 1) % 2
+            self.can_send = True
+        else:
+            self.send_to_network(self.last_msg)
+            self.start_timer(self.timeout)
+
+    def on_interrupt(self):
+        self.send_to_network(self.last_msg)
+        self.start_timer(self.timeout)
+
 
 class AltReceiver(BaseReceiver):
     # TODO: fill me in!
-    pass
+    def __init__(self):
+        super(AltReceiver, self).__init__()
+        self.segment = 0
+
+    def receive_from_client(self, seg):
+        if type(seg.msg) == dict and seg.msg['segment'] == self.segment \
+            and hash(seg.msg['message']) == seg.msg['hash']:
+            # send an ACK TODO:
+            self.send_to_app(seg.msg['message'])
+            msg = {'segment': self.segment, 'hash': hash(self.segment)}
+            self.segment = (self.segment + 1) % 2
+            self.send_to_network(Segment(msg, 'sender'))
+        else:
+            # send NAK
+            NAK_seg = 1 if self.segment else 0
+            msg = {'segment': NAK_seg, 'hash': hash(NAK_seg)}
+            self.send_to_network(Segment(msg, 'sender'))
+
+
+
+
 
 class GBNSender(BaseSender):
     # TODO: fill me in!
