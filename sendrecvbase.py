@@ -7,6 +7,7 @@
 ##
 
 import Queue
+import copy
 
 class BaseSender(object):
     def __init__(self, app_interval):
@@ -21,7 +22,7 @@ class BaseSender(object):
         self.blocked         = False
 
     def send_to_network(self, seg):
-        self.output_queue.put(seg)
+        self.output_queue.put(copy.deepcopy(seg))
 
     def disallow_app_msgs(self):
         self.blocked = True
@@ -81,4 +82,3 @@ class BaseReceiver(object):
 
     def receive_from_client(self, seg):
         pass
-

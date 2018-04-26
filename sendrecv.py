@@ -32,6 +32,7 @@
 from sendrecvbase import BaseSender, BaseReceiver
 
 import Queue
+import collections
 
 class Segment:
     def __init__(self, msg, dst):
@@ -83,6 +84,7 @@ class AltSender(BaseSender):
                 and hash(seg.msg['segment']) == seg.msg['hash']:
             self.segment = (self.segment + 1) % 2
             self.can_send = True
+            self.end_timer()
         else:
             self.send_to_network(self.last_msg)
             self.start_timer(self.timeout)
@@ -93,7 +95,6 @@ class AltSender(BaseSender):
 
 
 class AltReceiver(BaseReceiver):
-    # TODO: fill me in!
     def __init__(self):
         super(AltReceiver, self).__init__()
         self.segment = 0
@@ -101,7 +102,6 @@ class AltReceiver(BaseReceiver):
     def receive_from_client(self, seg):
         if type(seg.msg) == dict and seg.msg['segment'] == self.segment \
             and hash(seg.msg['message']) == seg.msg['hash']:
-            # send an ACK TODO:
             self.send_to_app(seg.msg['message'])
             msg = {'segment': self.segment, 'hash': hash(self.segment)}
             self.segment = (self.segment + 1) % 2
@@ -118,8 +118,72 @@ class AltReceiver(BaseReceiver):
 
 class GBNSender(BaseSender):
     # TODO: fill me in!
-    pass
+    def __init__(self, app_interval):
+        super(GBNSender, self).__init__(app_interval)
+        self.segment     = 0
+        self.window_size = 10
+        self.last_msg    = collections.deque([], self.window_size)
+        self.window_size = 10
+        self.timeout     = 10
+
+    def receive_from_app(self, msg):
+        # get the hash of the message to be used for comparison for receiver
+        if len(self.last_msg) < self.last_msg.maxlen:
+            # only add message to the queue if there is space
+            msg = {'segment':self.segment, 'message':msg, 'hash':hash(msg)}
+            seg = Segment(msg, 'receiver')
+            self.last_msg.append(seg)  # do not wait for packet if full
+            self.send_to_network(seg)
+            self.start_timer(self.timeout)
+            # waiting for ACK
+
+    def receive_from_network(self, seg):
+        if type(seg.msg) == dict and seg.msg['segment'] >= self.segment \
+                and hash(seg.msg['segment']) == seg.msg['hash']:
+            self.segment = seg.msg['segment'] + 1
+            try:
+                # if we ACK the last item in the dequeue then we get an IndexError since the queue would be empty
+                current_seg = self.last_msg.popleft()
+                print current_seg.msg
+                while current_seg.msg['segment'] < self.segment:
+                    # pull stuff off queue if ACKed
+                    current_seg = self.last_msg.popleft()
+                self.last_msg.append(current_seg)
+                # still waiting to get ACKs
+                self.start_timer()
+            except IndexError:
+                # no more packets to wait on
+                self.end_timer()
+        else:
+            # resend everything in the dequeue
+            self.resend()
+
+    def on_interrupt(self):
+        self.resend()
+
+    def resend(self):
+        for seg in self.last_msg:
+            # send every message back to receiver
+            self.send_to_network(seg)
+        self.start_timer(self.timeout)
+
+
 
 class GBNReceiver(BaseReceiver):
     # TODO: fill me in!
-    pass
+    def __init__(self):
+        super(GBNReceiver, self).__init__()
+        self.segment = 0 # note this is an int that can be greater than 1
+
+    def receive_from_client(self, seg):
+        if type(seg.msg) == dict and seg.msg['segment'] == self.segment \
+            and hash(seg.msg['message']) == seg.msg['hash']:
+            # send an ACK:
+            self.send_to_app(seg.msg['message'])
+            msg = {'segment': self.segment, 'hash': hash(self.segment)}
+            self.segment += 1
+            self.send_to_network(Segment(msg, 'sender'))
+        else:
+            # NAK case
+            msg = {'segment': self.segment - 1, 'hash': hash(self.segment - 1)}
+            self.send_to_network(Segment(msg, 'sender'))
