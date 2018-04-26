@@ -76,7 +76,7 @@ class AltSender(BaseSender):
             self.last_msg = seg
             self.send_to_network(seg)
             self.start_timer(self.timeout)
-            # waiting for ACK
+            # waiting for ACK now
             self.can_send = False
 
     def receive_from_network(self, seg):
@@ -90,6 +90,7 @@ class AltSender(BaseSender):
             self.start_timer(self.timeout)
 
     def on_interrupt(self):
+        # resend message
         self.send_to_network(self.last_msg)
         self.start_timer(self.timeout)
 
@@ -108,7 +109,7 @@ class AltReceiver(BaseReceiver):
             self.send_to_network(Segment(msg, 'sender'))
         else:
             # send NAK
-            NAK_seg = 1 if self.segment else 0
+            NAK_seg = 0 if self.segment else 1
             msg = {'segment': NAK_seg, 'hash': hash(NAK_seg)}
             self.send_to_network(Segment(msg, 'sender'))
 
@@ -117,7 +118,6 @@ class AltReceiver(BaseReceiver):
 
 
 class GBNSender(BaseSender):
-    # TODO: fill me in!
     def __init__(self, app_interval):
         super(GBNSender, self).__init__(app_interval)
         self.segment     = 0
@@ -144,7 +144,6 @@ class GBNSender(BaseSender):
             try:
                 # if we ACK the last item in the dequeue then we get an IndexError since the queue would be empty
                 current_seg = self.last_msg.popleft()
-                print current_seg.msg
                 while current_seg.msg['segment'] < self.segment:
                     # pull stuff off queue if ACKed
                     current_seg = self.last_msg.popleft()
@@ -170,7 +169,6 @@ class GBNSender(BaseSender):
 
 
 class GBNReceiver(BaseReceiver):
-    # TODO: fill me in!
     def __init__(self):
         super(GBNReceiver, self).__init__()
         self.segment = 0 # note this is an int that can be greater than 1
